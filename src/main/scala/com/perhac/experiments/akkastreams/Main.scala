@@ -2,33 +2,32 @@ package com.perhac.experiments.akkastreams
 
 import java.nio.file.Paths
 
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream._
 import akka.stream.scaladsl._
 import akka.util.ByteString
 
 import scala.concurrent._
+import scala.concurrent.duration._
 
-object Main {
+object Main extends App {
 
   implicit val system = ActorSystem("QuickStart")
   implicit val materializer = ActorMaterializer()
-  implicit val ec: ExecutionContextExecutor = system.dispatcher
+  implicit val ec = system.dispatcher
 
-  val makeString: ByteString => String = _.utf8String
-  val splitString: String => (String, Int, String) = _.split(",").toList match {
-    case name :: age :: company :: Nil => (name, age.toInt, company)
-  }
+  val source: Source[Int, NotUsed] = Source(1 to 100)
 
-  def main(args: Array[String]): Unit = {
-    FileIO
-      .fromPath(Paths.get("input-data"))
-      .via(Framing.delimiter(ByteString("\n"), Integer.MAX_VALUE))
-      .map(makeString.andThen(splitString))
-      .grouped(100)
-      .to(Sink.foreach(println))
-      .run()
-      .onComplete(_ ⇒ system.terminate())
-  }
+  val factorials = source.scan(BigInt(1))((acc, next) => acc * next)
+
+  val result: Future[IOResult] =
+    factorials
+      .map(num => ByteString(s"$num\n"))
+      .runWith(FileIO.toPath(Paths.get("factorials.txt")))
+
+  result.onComplete(_ => system.terminate())
+
+  Await.result(result, Duration.Inf)
 
 }
