@@ -1,8 +1,8 @@
-peter; Some kind of tweet #rock
-john; Some #kind of tweet
-tom; Best kind of #tweet
+peter; Some #first kind of tweet
+john; Some #second tweet
+tom; Best #third kind of tweet
 reddy; Can I have your #banana ?
-peter; Some kind of tweet #rock
+peter; This tweet is #da-best
 john; Some #kind of tweet
 tom; Best kind of #tweet
 reddy; Can I have your #banana ?
@@ -16,7 +16,7 @@ tom; Best kind of #tweet
 reddy; Can I have your #banana ?
 peter; Some kind of tweet #rock
 john; Some #kind of tweet
-tom; #Best kind of #tweet
+tom; Best kind of #tweet
 reddy; Can I have your #banana ?
 peter; Some kind of tweet #rock
 john; Some #kind of tweet
@@ -226,3 +226,6 @@ peter; Some kind of tweet #rock
 john; Some #kind of tweet
 tom; Best kind of #tweet
 reddy; Can I have your #banana ?
+foobar; some #foobar
+zen; some #zen
+Z; #Z

@@ -4,38 +4,35 @@ import java.nio.file.Paths
 
 import akka.Done
 import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
+import akka.stream.OverflowStrategy.backpressure
 import akka.stream.scaladsl._
-import akka.stream.{ActorMaterializer, IOResult}
 import akka.util.ByteString
+import com.perhac.experiments.akkastreams.Tweet.parseTweet
 
 import scala.PartialFunction.condOpt
-import scala.concurrent.duration.{Duration, _}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.util.matching.Regex
 
+final case class Author(handle: String)
+final case class Hashtag(name: String)
+final case class Tweet(author: Author, timestamp: Long, body: String) {
+  val hashtags: Set[Hashtag] = Hashtag.HashtagRegex.findAllIn(body).map(Hashtag.apply).toSet
+}
+
+object Hashtag {
+  val HashtagRegex = """(#[\w-]+)""".r
+}
+object Tweet {
+  val TweetRegex: Regex = """^(\w+); (.+)$""".r
+  def parseTweet(s: String): Option[Tweet] = condOpt(s) {
+    case TweetRegex(author, body) => Tweet(Author(author), System.currentTimeMillis(), body)
+  }
+}
+
 object TweetsDemo extends App {
-
-  final case class Author(handle: String)
-
-  final case class Hashtag(name: String)
-
-  final case class Tweet(author: Author, timestamp: Long, body: String) {
-    def hashtags: Set[Hashtag] =
-      body
-        .split(" ")
-        .collect {
-          case t if t.startsWith("#") ⇒ Hashtag(t.replaceAll("[^#\\w]", ""))
-        }
-        .toSet
-  }
-  object Tweet {
-
-    val TweetFormat: Regex = """^(\w+); (.+)$""".r
-
-    def parseTweet(s: String): Option[Tweet] = condOpt(s) {
-      case TweetFormat(author, body) => Tweet(Author(author), System.currentTimeMillis(), body)
-    }
-  }
 
   implicit val system: ActorSystem = ActorSystem("reactive-tweets")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
@@ -46,18 +43,17 @@ object TweetsDemo extends App {
     s1 ++ s2
   }
 
-  val fileSrc = FileIO.fromPath(Paths.get("tweets"))
-  val tweets: Source[Option[Tweet], Future[IOResult]] =
-    fileSrc.via(Framing.delimiter(ByteString("\n"), maximumFrameLength = 1024)).map(utf8.andThen(Tweet.parseTweet))
-  val res: Future[Done] = tweets
-    .mapConcat(_.map(_.hashtags).toList)
+  val res: Future[Done] = FileIO
+    .fromPath(Paths.get("tweets"))
+    .buffer(10, backpressure)
+    .via(Framing.delimiter(ByteString("\n"), 1024))
+    .map(utf8.andThen(parseTweet))
+    .map(_.map(_.hashtags).toSet)
     .reduce(combineSets[Hashtag])
     .mapConcat(identity)
-    .map(_.name.toUpperCase)
-    .throttle(1, 250.millis)
-    .runWith(Sink.foreach(println)) // Attach the Flow to a Sink that will finally print the hashtags
+    .take(5)
+    .runWith(Sink.foreach(println))
 
-  import scala.concurrent.ExecutionContext.Implicits.global
   res.onComplete(_ => system.terminate())
 
   Await.ready(res, Duration.Inf)
