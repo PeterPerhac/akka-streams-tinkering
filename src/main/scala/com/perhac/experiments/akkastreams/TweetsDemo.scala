@@ -5,10 +5,9 @@ import java.nio.file.Paths
 import akka.Done
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.stream.OverflowStrategy.backpressure
 import akka.stream.scaladsl._
 import akka.util.ByteString
-import com.perhac.experiments.akkastreams.Tweet.parseTweet
+import com.perhac.experiments.akkastreams.TweetsDemo.Tweet.parseTweet
 
 import scala.PartialFunction.condOpt
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -16,23 +15,25 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.util.matching.Regex
 
-final case class Author(handle: String)
-final case class Hashtag(name: String)
-final case class Tweet(author: Author, timestamp: Long, body: String) {
-  val hashtags: Set[Hashtag] = Hashtag.HashtagRegex.findAllIn(body).map(Hashtag.apply).toSet
-}
-
-object Hashtag {
-  val HashtagRegex = """(#[\w-]+)""".r
-}
-object Tweet {
-  val TweetRegex: Regex = """^(\w+); (.+)$""".r
-  def parseTweet(s: String): Option[Tweet] = condOpt(s) {
-    case TweetRegex(author, body) => Tweet(Author(author), System.currentTimeMillis(), body)
-  }
-}
-
 object TweetsDemo extends App {
+
+  final case class Author(handle: String)
+
+  final case class Hashtag(name: String)
+
+  val HashtagRegex = """(#[\w-]+)""".r
+
+  final case class Tweet(author: Author, timestamp: Long, body: String) {
+    val hashtags: Set[Hashtag] = HashtagRegex.findAllIn(body).map(Hashtag.apply).toSet
+  }
+  object Tweet {
+
+    val TweetRegex: Regex = """^(\w+); (.+)$""".r
+
+    def parseTweet(s: String): Option[Tweet] = condOpt(s) {
+      case TweetRegex(author, body) => Tweet(Author(author), System.currentTimeMillis(), body)
+    }
+  }
 
   implicit val system: ActorSystem = ActorSystem("reactive-tweets")
   implicit val materializer: ActorMaterializer = ActorMaterializer()
@@ -45,10 +46,9 @@ object TweetsDemo extends App {
 
   val res: Future[Done] = FileIO
     .fromPath(Paths.get("tweets"))
-    .buffer(10, backpressure)
     .via(Framing.delimiter(ByteString("\n"), 1024))
     .map(utf8.andThen(parseTweet))
-    .map(_.map(_.hashtags).toSet)
+    .map(_.map(_.hashtags).getOrElse(Set.empty))
     .reduce(combineSets[Hashtag])
     .mapConcat(identity)
     .take(5)
